@@ -9,6 +9,17 @@ TRUIST_FONT = "'Segoe UI', sans-serif"
 TRUIST_SHADOW = "rgba(81, 43, 139, 0.2)"
 LOGO_PATH = "chatbot/assets/tfc_logo.png"
 
+# SMTP Fallback
+SMTP_SERVER = "smtp.yourbank.com"
+SMTP_PORT = 587
+SMTP_USERNAME = os.getenv("SMTP_USERNAME", "alerts@yourbank.com")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "your-password")  # Use env vars in prod
+
+# Email Alert Settings
+ALERT_EMAIL_FROM = "alerts@yourdomain.com"     # Must be verified in SES
+ALERT_EMAIL_TO = "cloudaiops@yourbank.com"
+AWS_REGION = "us-west-2"
+
 # === App Metadata ===
 APP_NAME = "DevGenius AI Co-Pilot"
 ORG_NAME = "Truist"

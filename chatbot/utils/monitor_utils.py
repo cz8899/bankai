@@ -1,5 +1,3 @@
-# chatbot/utils/monitor_utils.py
-
 import pandas as pd
 import os
 import json
@@ -15,9 +13,12 @@ def load_logs() -> pd.DataFrame:
         return pd.DataFrame()
     with open(INTERACTIONS_LOG, "r") as f:
         records = [json.loads(line) for line in f if line.strip()]
-    return pd.DataFrame(records)
+    df = pd.DataFrame(records)
+    if "timestamp" in df.columns:
+        df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+    return df
 
-# === Fallback log parser for legacy support ===
+
 def load_interaction_log() -> list[dict]:
     if not os.path.exists(INTERACTIONS_LOG):
         return []
@@ -40,7 +41,7 @@ def summarize_costs(logs: pd.DataFrame, mode_filter: Optional[Literal["Claude", 
         "user": "anon"
     })
 
-# === Usage Summary by Mode ===
+
 def summarize_usage_by_mode(logs: pd.DataFrame) -> pd.DataFrame:
     if logs.empty:
         return pd.DataFrame(columns=["Mode", "Total Cost ($)", "Total Tokens"])
@@ -52,25 +53,55 @@ def summarize_usage_by_mode(logs: pd.DataFrame) -> pd.DataFrame:
         "tokens": "Total Tokens"
     })
 
-# === Usage loader (if needed as alias) ===
-def load_usage_data() -> pd.DataFrame:
-    return load_logs()
+# === Aggregated Usage Summary (daily or per user) ===
+def summarize_usage_aggregated(logs: pd.DataFrame, by: Literal["date", "user"] = "date") -> pd.DataFrame:
+    if logs.empty:
+        return pd.DataFrame()
+
+    df = summarize_costs(logs)
+    if by == "date":
+        df["date"] = df["timestamp"].dt.date
+        return df.groupby("date")[["cost", "tokens"]].sum().reset_index()
+    elif by == "user":
+        return df.groupby("user")[["cost", "tokens"]].sum().reset_index()
+    else:
+        return pd.DataFrame()
 
 # === Retrieval Source Analysis ===
+def safe_parse_sources(val):
+    if isinstance(val, list):
+        return val
+    if isinstance(val, str):
+        try:
+            parsed = json.loads(val)
+            return parsed if isinstance(parsed, list) else [parsed]
+        except:
+            return [s.strip() for s in val.split(",")]
+    return []
+
 def get_retrieval_insights(logs: pd.DataFrame) -> pd.DataFrame:
     if logs.empty or "retrieval_sources" not in logs.columns:
         return pd.DataFrame(columns=["source", "count"])
-
-    retrievals = logs["retrieval_sources"].dropna().explode()
-    if retrievals.empty:
-        return pd.DataFrame(columns=["source", "count"])
-
-    return retrievals.value_counts().reset_index().rename(columns={
+    
+    parsed = logs["retrieval_sources"].dropna().map(safe_parse_sources)
+    exploded = parsed.explode().dropna()
+    return exploded.value_counts().reset_index().rename(columns={
         "index": "source",
         "retrieval_sources": "count"
     })
 
-# === Recent Q&A (Optional export) ===
+# === Anomaly Detection ===
+def detect_cost_spikes(logs: pd.DataFrame, threshold: float = 10.0) -> pd.DataFrame:
+    if logs.empty:
+        return pd.DataFrame()
+
+    df = summarize_costs(logs)
+    df["date"] = df["timestamp"].dt.date
+    daily_totals = df.groupby("date")["cost"].sum()
+    spikes = daily_totals[daily_totals > threshold]
+    return spikes.reset_index(name="Total Cost")
+
+# === Recent Q&A (for inspection/export) ===
 def extract_recent_questions(logs: pd.DataFrame, limit: int = 10) -> list[dict]:
     if logs.empty:
         return []
