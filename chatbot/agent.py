@@ -1,3 +1,5 @@
+# chatbot/agent.py
+
 import json
 import boto3
 from typing import List, Dict, Optional
@@ -7,41 +9,39 @@ from chatbot.utils.constants import (
     BEDROCK_AGENT_ID,
     BEDROCK_AGENT_ALIAS_ID,
     SYSTEM_MESSAGE,
-    MAX_CHUNKS
+    MAX_CHUNKS,
 )
 from chatbot.ranking import rank_chunks_by_similarity
 from chatbot.logger import logger
 
-
-# === Bedrock clients ===
+# Bedrock clients
 bedrock = boto3.client("bedrock-runtime", region_name=BEDROCK_REGION)
 agent_runtime = boto3.client("bedrock-agent-runtime", region_name=BEDROCK_REGION)
 
 
 def call_claude(user_input: str, context: str = "") -> str:
     """
-    Calls Claude 3 Sonnet via Bedrock with optional prepended context.
+    Calls Claude 3 Sonnet on Bedrock with optional RAG context.
     """
+    messages = [
+        {"role": "system", "content": SYSTEM_MESSAGE},
+        {"role": "user", "content": f"{context}\n\n{user_input}".strip()}
+    ]
+
+    payload = {
+        "anthropic_version": "bedrock-2023-05-31",
+        "messages": messages,
+        "max_tokens": 1024,
+        "temperature": 0.7,
+    }
+
     try:
-        messages = [
-            {"role": "system", "content": SYSTEM_MESSAGE},
-            {"role": "user", "content": f"{context.strip()}\n\n{user_input.strip()}"}
-        ]
-
-        payload = {
-            "anthropic_version": "bedrock-2023-05-31",
-            "messages": messages,
-            "max_tokens": 1024,
-            "temperature": 0.7,
-        }
-
         response = bedrock.invoke_model(
             modelId=BEDROCK_MODEL_ID,
             contentType="application/json",
             accept="application/json",
             body=json.dumps(payload)
         )
-
         body = json.loads(response["body"].read())
         return body.get("content", "[Claude returned no content]")
 
@@ -50,41 +50,37 @@ def call_claude(user_input: str, context: str = "") -> str:
         return f"⚠️ Claude error: {str(e)}"
 
 
-def call_bedrock_agent(user_input: str, session_id: Optional[str] = None) -> str:
+def call_bedrock_agent(user_input: str, session_id: Optional[str] = None, fallback_to_claude: bool = True) -> str:
     """
-    Calls Bedrock Agent via `invoke_agent` with provided session ID (or generates one).
+    Invokes a Bedrock Agent via InvokeAgent, with optional fallback to Claude.
     """
     if not session_id:
-        session_id = f"session-{hash(user_input)}"
+        session_id = f"session-{abs(hash(user_input))}"
 
     try:
         response = agent_runtime.invoke_agent(
             agentId=BEDROCK_AGENT_ID,
             agentAliasId=BEDROCK_AGENT_ALIAS_ID,
             sessionId=session_id,
-            input={"text": user_input.strip()}
+            input={"text": user_input}
         )
 
-        # Expected structure: {"completion": {"content": "<json-string>"}}
-        content_raw = response.get("completion", {}).get("content", "")
-        if not content_raw:
-            logger.warning("[Agent] Empty content received.")
-            return "[Agent returned no message]"
-
-        parsed = json.loads(content_raw)
-        return parsed.get("message", "[Agent response missing 'message']")
+        body = response.get("completion", {}).get("content", "")
+        if body:
+            content = json.loads(body)
+            return content.get("message", "[Agent returned no message]")
+        return "[Agent returned no message]"
 
     except Exception as e:
         logger.exception("Bedrock Agent invocation failed")
+        if fallback_to_claude:
+            logger.warning("Falling back to Claude due to Agent failure")
+            return call_claude(user_input)
         return f"⚠️ Agent error: {str(e)}"
 
 
 def get_ranked_chunks(query: str, all_chunks: List[Dict]) -> List[Dict]:
     """
-    Returns top-N relevant chunks using semantic similarity ranking.
+    Return top-N relevant chunks using local vector similarity.
     """
-    try:
-        return rank_chunks_by_similarity(query, all_chunks)[:MAX_CHUNKS]
-    except Exception as e:
-        logger.exception("Chunk ranking failed")
-        return []
+    return rank_chunks_by_similarity(query, all_chunks)[:MAX_CHUNKS]
