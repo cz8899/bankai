@@ -1,50 +1,62 @@
-# chatbot/rag/retrieval_layer.py
+# chatbot/rag/retrieval_layer.py (enhanced)
 
 import os
-from typing import List, Dict
+from typing import List, Dict, Literal, Optional
 from chatbot.utils.constants import (
     RETRIEVAL_BACKEND,
     BEDROCK_KB_ID,
     BEDROCK_REGION,
     MAX_CHUNKS,
+    EMBEDDING_ENGINE  # "bedrock" | "huggingface"
 )
 from chatbot.logger import logger
-from chatbot.ranking import rank_chunks_by_similarity
+from chatbot.ranking import rank_chunks_by_similarity, rank_with_bedrock
 from chatbot.utils.text_utils import clean_text
-
+from chatbot.utils.filters import filter_chunks_by_metadata
 import boto3
 
-# === Bedrock KB Client ===
+# Bedrock clients
 bedrock_agent = boto3.client("bedrock-agent-runtime", region_name=BEDROCK_REGION)
 
-# === OpenSearch (optional) ===
+# Optional: OpenSearch connector
 try:
     from chatbot.rag.opensearch_client import search_opensearch
 except ImportError:
     search_opensearch = None
 
 
-def get_relevant_chunks(query: str, top_k: int = MAX_CHUNKS) -> List[Dict]:
-    """
-    Unified RAG interface — returns chunks from backend of choice.
-    """
+def get_relevant_chunks(query: str, top_k: int = MAX_CHUNKS, metadata_filter: Optional[dict] = None) -> List[Dict]:
     logger.info(f"[Retrieval] Backend: {RETRIEVAL_BACKEND} | Query: {query}")
 
+    chunks = []
     if RETRIEVAL_BACKEND == "bedrock":
-        return query_bedrock_knowledge_base(query, top_k)
-
+        chunks = query_bedrock_knowledge_base(query, top_k)
     elif RETRIEVAL_BACKEND == "opensearch" and search_opensearch:
-        return query_opensearch(query, top_k)
-
+        chunks = query_opensearch(query, top_k)
     else:
-        logger.warning("[Retrieval] Unknown backend or OpenSearch not available")
+        logger.warning("[Retrieval] Invalid backend or OpenSearch unavailable")
         return []
+
+    if metadata_filter:
+        chunks = filter_chunks_by_metadata(chunks, metadata_filter)
+
+    return rerank_chunks(query, chunks, top_k=top_k)
+
+
+def rerank_chunks(query: str, chunks: List[Dict], top_k: int) -> List[Dict]:
+    if not chunks:
+        return []
+
+    if EMBEDDING_ENGINE == "huggingface":
+        return rank_chunks_by_similarity(query, chunks)[:top_k]
+    elif EMBEDDING_ENGINE == "bedrock":
+        return rank_with_bedrock(query, chunks)[:top_k]
+    else:
+        logger.warning("Unknown reranking method. Falling back to default.")
+        return chunks[:top_k]
 
 
 def query_bedrock_knowledge_base(query: str, top_k: int) -> List[Dict]:
-    """
-    Queries Bedrock Knowledge Base and formats chunks with metadata.
-    """
     try:
         response = bedrock_agent.retrieve(
             knowledgeBaseId=BEDROCK_KB_ID,
@@ -53,19 +65,12 @@ def query_bedrock_knowledge_base(query: str, top_k: int) -> List[Dict]:
         )
 
         results = response.get("retrievalResults", [])
-        chunks = []
-        for item in results:
-            content = clean_text(item.get("content", ""))
-            metadata = item.get("metadata", {})
-            chunks.append({
-                "content": content,
-                "metadata": metadata,
-                "score": 0.8,  # Estimated base score for unranked Bedrock KB results
+        for r in results:
+            yield {
+                "content": clean_text(r.get("content", "")),
+                "metadata": r.get("metadata", {}),
                 "source": "bedrock_kb"
-            })
-
-        logger.info(f"[Bedrock KB] Retrieved {len(chunks)} chunks")
-        return chunks
+            }
 
     except Exception as e:
         logger.exception(f"[Bedrock KB] Retrieval failed: {e}")
@@ -73,34 +78,18 @@ def query_bedrock_knowledge_base(query: str, top_k: int) -> List[Dict]:
 
 
 def query_opensearch(query: str, top_k: int) -> List[Dict]:
-    """
-    Retrieves top chunks from OpenSearch with similarity scores.
-    """
     try:
         raw_hits = search_opensearch(query, k=top_k)
-        chunks = []
-        for hit in raw_hits:
-            chunks.append({
+        return [
+            {
                 "content": clean_text(hit["_source"].get("content", "")),
                 "metadata": hit["_source"].get("metadata", {}),
-                "score": hit.get("_score", 0.0),
+                "score": hit["_score"],
                 "source": "opensearch"
-            })
-
-        logger.info(f"[OpenSearch] Retrieved {len(chunks)} chunks")
-        return chunks
+            }
+            for hit in raw_hits
+        ]
 
     except Exception as e:
         logger.exception(f"[OpenSearch] Retrieval failed: {e}")
         return []
-
-
-def get_ranked_relevant_chunks(query: str, all_chunks: List[Dict], top_k: int = MAX_CHUNKS) -> List[Dict]:
-    """
-    Final reranker for relevance based on local embedding similarity.
-    """
-    if not all_chunks:
-        return []
-
-    ranked = rank_chunks_by_similarity(query, all_chunks)
-    return ranked[:top_k]
