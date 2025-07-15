@@ -14,6 +14,10 @@ from chatbot.ranking import rank_chunks_by_similarity, rank_with_bedrock
 from chatbot.utils.text_utils import clean_text
 from chatbot.utils.filters import filter_chunks_by_metadata
 import boto3
+from chatbot.utils.config_loader import get_config_value
+ 
+score_threshold = get_config_value("chunk_score_threshold", 0.5)
+embedding_engine = get_config_value("embedding_engine", "bedrock")
 
 # Bedrock clients
 bedrock_agent = boto3.client("bedrock-agent-runtime", region_name=BEDROCK_REGION)
