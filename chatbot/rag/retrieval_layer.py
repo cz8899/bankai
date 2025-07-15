@@ -1,4 +1,4 @@
-# chatbot/rag/retrieval_layer.py (enhanced)
+# chatbot/rag/retrieval_layer.py (enhanced+detailed comments)
 
 import os
 from typing import List, Dict, Literal, Optional
