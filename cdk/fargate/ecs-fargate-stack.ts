@@ -1,3 +1,5 @@
+// cdk/fargate/ecs-fargate-stack.ts
+
 import {
   Stack,
   StackProps,
@@ -9,49 +11,15 @@ import {
   aws_certificatemanager as acm,
   aws_iam as iam,
   aws_logs as logs,
+  aws_s3_assets as s3Assets,
 } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as path from 'path';
-import * as ecs from 'aws-cdk-lib/aws-ecs';
-import * as assets from 'aws-cdk-lib/aws-s3-assets';
-import * as path from 'path';
 
-const configAsset = new assets.Asset(this, 'DashboardConfigAsset', {
-  path: path.join(__dirname, '../config/dashboard_config.json'),
-});
-
-configAsset.grantRead(taskDef.taskRole);
-
-container.addEnvironment('DASHBOARD_CONFIG_PATH', '/app/config/dashboard_config.json');
-
-container.addMountPoints({
-  containerPath: '/app/config',
-  readOnly: false,
-  sourceVolume: 'dashboard-config-vol'
-});
-
-taskDef.addVolume({
-  name: 'dashboard-config-vol',
-  host: {
-    sourcePath: '/mnt/efs/config', // Or EBS mount if you persist changes
-  }
-});
-
-interface FargateStackProps extends StackProps {
+export interface FargateStackProps extends StackProps {
   vpc: ec2.IVpc;
   certificateArn: string;
-  const cert = props.certificate;
 }
-
-const certRenewal = new lambda.Function(this, 'CertRenewalLambda', {
-  runtime: lambda.Runtime.PYTHON_3_11,
-  code: lambda.Code.fromAsset(path.join(__dirname, '../lambdas/cert_renewal_handler')),
-  handler: 'cert_renewal_handler.lambda_handler',
-  timeout: Duration.seconds(10),
-  environment: {
-    CERT_ARN: privateCertStack.certificate.certificateArn,
-  },
-});
 
 export class DevGeniusFargateStack extends Stack {
   constructor(scope: Construct, id: string, props: FargateStackProps) {
@@ -59,15 +27,18 @@ export class DevGeniusFargateStack extends Stack {
 
     const { vpc, certificateArn } = props;
 
+    // ECS Cluster
     const cluster = new ecs.Cluster(this, 'DevGeniusCluster', {
       vpc,
       containerInsights: true,
     });
 
+    // CloudWatch Logs
     const logGroup = new logs.LogGroup(this, 'DevGeniusLogGroup', {
       retention: logs.RetentionDays.ONE_WEEK,
     });
 
+    // Task Role
     const taskRole = new iam.Role(this, 'DevGeniusTaskRole', {
       assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
       description: 'Task role for ECS Fargate Streamlit UI',
@@ -77,61 +48,57 @@ export class DevGeniusFargateStack extends Stack {
       ],
     });
 
+    // Fargate Task Definition
     const taskDefinition = new ecs.FargateTaskDefinition(this, 'TaskDef', {
       memoryLimitMiB: 1024,
       cpu: 512,
       taskRole,
     });
 
+    // Load Streamlit App (Docker build from root)
     const container = taskDefinition.addContainer('StreamlitContainer', {
       image: ecs.ContainerImage.fromAsset(path.join(__dirname, '../../')),
-      logging: ecs.LogDriver.awsLogs({
-        streamPrefix: 'Streamlit',
-        logGroup,
-      }),
+      logging: ecs.LogDriver.awsLogs({ streamPrefix: 'Streamlit', logGroup }),
       environment: {
         STREAMLIT_SERVER_PORT: '8501',
         AWS_REGION: this.region,
       },
     });
 
-    container.addPortMappings({
-      containerPort: 8501,
-    });
+    container.addPortMappings({ containerPort: 8501 });
 
+    // Security Group
     const sg = new ec2.SecurityGroup(this, 'FargateSG', {
       vpc,
-      description: 'Allow HTTPS inbound to ALB and ALB->ECS',
+      description: 'Allow HTTPS from internal sources',
       allowAllOutbound: true,
     });
+    sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(443), 'HTTPS access');
 
-    sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(443), 'HTTPS from internal access');
-
-    const lb = new elbv2.ApplicationLoadBalancer(this, 'InternalALB', {
+    // Load Balancer
+    const alb = new elbv2.ApplicationLoadBalancer(this, 'InternalALB', {
       vpc,
-      internetConnected: false,
+      internetFacing: false,
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
       securityGroup: sg,
-      loadBalancerName: 'DevGeniusALB',
     });
 
     const cert = acm.Certificate.fromCertificateArn(this, 'Cert', certificateArn);
 
-    const listener = lb.addListener('HTTPSListener', {
+    const listener = alb.addListener('HTTPSListener', {
       port: 443,
       certificates: [cert],
       protocol: elbv2.ApplicationProtocol.HTTPS,
     });
 
+    // ECS Fargate Service
     const service = new ecs.FargateService(this, 'FargateService', {
       cluster,
       taskDefinition,
-      securityGroups: [sg],
       desiredCount: 1,
       assignPublicIp: false,
-      vpcSubnets: {
-        subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
-      },
+      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+      securityGroups: [sg],
     });
 
     listener.addTargets('StreamlitTarget', {
@@ -145,5 +112,12 @@ export class DevGeniusFargateStack extends Stack {
         unhealthyThresholdCount: 5,
       },
     });
+
+    // === OPTIONAL: Static Config Mount (ZIP Lambda-compatible)
+    const configAsset = new s3Assets.Asset(this, 'DashboardConfigAsset', {
+      path: path.join(__dirname, '../config/dashboard_config.json'),
+    });
+    configAsset.grantRead(taskRole);
+    container.addEnvironment('DASHBOARD_CONFIG_S3_URL', configAsset.s3ObjectUrl);
   }
 }
