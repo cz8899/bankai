@@ -7,6 +7,10 @@ from datetime import datetime
 # === Paths ===
 INTERACTIONS_LOG = os.getenv("INTERACTIONS_LOG_PATH", "logs/interactions.jsonl")
 
+if is_admin_user():
+    st.sidebar.markdown("🛠️ [Admin Config Dashboard](./monitor_config)")
+    st.sidebar.markdown("📈 [Monitor Dashboard](./monitor)")
+    
 # === Log Loader ===
 def load_logs() -> pd.DataFrame:
     if not os.path.exists(INTERACTIONS_LOG):
