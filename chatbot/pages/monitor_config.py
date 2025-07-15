@@ -4,7 +4,12 @@ import streamlit as st
 import json
 from chatbot.utils.config_loader import get_config, save_config
 from chatbot.utils.constants import TRUIST_PURPLE
+from chatbot.utils.auth_utils import is_admin_user
 
+if not is_admin_user():
+    st.warning("⚠️ You are not authorized to edit configurations.")
+    st.stop()
+    
 st.set_page_config(page_title="DevGenius Config Editor", layout="wide")
 st.title("🔧 DevGenius AI Tuning Config")
 
