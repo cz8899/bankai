@@ -15,10 +15,11 @@ def planner(messages: list[dict], mode: str = "Claude") -> str:
         mode: Claude | Agent | RAG+Chunks
 
     Returns:
-        string LLM response
+        LLM response string
     """
     user_input = messages[-1]["content"]
     intent = route_prompt(user_input)
+    logger.info(f"[Planner] User intent routed as: {intent}")
 
     # === Stage Advancement ===
     current_stage = st.session_state.get("planner_stage", "gathering_requirements")
@@ -33,22 +34,22 @@ def planner(messages: list[dict], mode: str = "Claude") -> str:
             next_stage_idx = PLANNER_STAGES.index(current_stage) + 1
             if next_stage_idx < len(PLANNER_STAGES):
                 st.session_state.planner_stage = PLANNER_STAGES[next_stage_idx]
+            else:
+                logger.debug("[Stage] Already at final stage: %s", current_stage)
     except Exception as e:
-        logger.warning(f"[Stage] Stage fallback to default due to: {e}")
+        logger.warning("[Stage] Fallback to default stage due to error: %s", str(e))
         st.session_state.planner_stage = "gathering_requirements"
 
     # === Mode Routing ===
     try:
         if mode == "Claude":
-            logger.info("[Planner] Using Claude mode")
+            logger.info("[Planner] Mode: Claude")
             return call_claude(user_input)
 
         elif mode == "Agent":
-            logger.info("[Planner] Using Agent mode")
-            session_id = st.session_state.get("agent_session_id")
-            if not session_id:
-                session_id = f"session-{st.session_state.conversation_id}"
-                st.session_state.agent_session_id = session_id
+            logger.info("[Planner] Mode: Bedrock Agent")
+            session_id = st.session_state.get("agent_session_id") or f"session-{st.session_state.get('conversation_id', 'anon')}"
+            st.session_state.agent_session_id = session_id
 
             agent_response = call_bedrock_agent(user_input, session_id=session_id)
             if "[Agent returned no message]" in agent_response:
@@ -58,14 +59,13 @@ def planner(messages: list[dict], mode: str = "Claude") -> str:
             return agent_response
 
         elif mode == "RAG+Chunks":
-            logger.info("[Planner] Using RAG+Chunks mode")
+            logger.info("[Planner] Mode: RAG+Chunks")
             try:
                 chunks = hybrid_rag_router(user_input)
                 if not chunks:
-                    logger.warning("[RAG] No relevant chunks found — fallback to Claude")
+                    logger.warning("[RAG] No relevant chunks found — falling back to Claude")
                     return call_claude(user_input)
 
-                # Build context and source metadata
                 context = "\n\n".join(
                     f"[{c['metadata'].get('title', 'Doc')}] "
                     f"(Page {c['metadata'].get('page', '?')}) "
@@ -84,9 +84,9 @@ def planner(messages: list[dict], mode: str = "Claude") -> str:
                 return call_claude(user_input)
 
         else:
-            logger.warning(f"[Planner] Unknown mode: {mode}")
+            logger.warning(f"[Planner] Unknown mode received: '{mode}'")
             return f"❓ Unknown mode '{mode}'. Please try again."
 
     except Exception as e:
-        logger.exception("Planner failed during mode handling: %s", str(e))
+        logger.exception("Planner failed during mode routing: %s", str(e))
         return "⚠️ Sorry, an error occurred while planning your request."
