@@ -17,6 +17,9 @@ from chatbot.utils.monitor_utils import (
 )
 from chatbot.utils.email_alert import send_cost_alert
 
+if is_admin_user():
+    st.sidebar.markdown("🛠️ [Admin Config Dashboard](./monitor_config)")
+    st.sidebar.markdown("📈 [Monitor Dashboard](./monitor)")
 # === Streamlit Config ===
 st.set_page_config(page_title="DevGenius Monitor", layout="wide", initial_sidebar_state="expanded")
 st_autorefresh(interval=30_000, key="refresh_dashboard")
