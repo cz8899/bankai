@@ -1,87 +1,99 @@
-# chatbot/agent.py
+# chatbot/app.py
 
-import json
-import boto3
-from typing import List, Dict, Optional
+import streamlit as st
+import uuid
+from chatbot.styles import inject_custom_css
+from chatbot.planner import planner
 from chatbot.utils.constants import (
-    BEDROCK_MODEL_ID,
-    BEDROCK_REGION,
-    BEDROCK_AGENT_ID,
-    BEDROCK_AGENT_ALIAS_ID,
-    SYSTEM_MESSAGE,
-    MAX_CHUNKS
+    TRUIST_PURPLE, LOGO_PATH, SYSTEM_MESSAGE
 )
-from chatbot.ranking import rank_chunks_by_similarity
-from chatbot.logger import logger
+from chatbot.utils.context_manager import init_session
+from chatbot.utils.cost_utils import track_usage, get_cost_estimate
+from chatbot.utils.streamlit_widgets import (
+    generate_arch,
+    generate_cdk,
+    generate_cfn,
+    generate_cost_estimate,
+    generate_doc,
+    generate_drawio
+)
 
+# --- Setup ---
+st.set_page_config(page_title="DevGenius AI", layout="wide")
+inject_custom_css()
+init_session()
 
-# Bedrock clients
-bedrock = boto3.client("bedrock-runtime", region_name=BEDROCK_REGION)
-agent_runtime = boto3.client("bedrock-agent-runtime", region_name=BEDROCK_REGION)
+# --- Session Metadata ---
+if 'conversation_id' not in st.session_state:
+    st.session_state['conversation_id'] = str(uuid.uuid4())
 
+if not st.session_state.get("messages"):
+    st.session_state.messages = []
+    st.session_state.messages.append({"role": "system", "content": SYSTEM_MESSAGE})
 
-def call_claude(user_input: str, context: str = "") -> str:
-    """
-    Calls Claude 3 Sonnet on Bedrock with optional RAG context.
-    """
-    messages = [
-        {"role": "system", "content": SYSTEM_MESSAGE},
-        {"role": "user", "content": f"{context}\n\n{user_input}".strip()}
-    ]
+# --- Header ---
+col1, col2 = st.columns([0.1, 0.9])
+with col1:
+    st.image(LOGO_PATH, width=90)
+with col2:
+    st.markdown(
+        f"<h1 style='color:{TRUIST_PURPLE}; margin-top: 0.3em;'>DevGenius AI Co-Pilot</h1>",
+        unsafe_allow_html=True
+    )
 
-    payload = {
-        "anthropic_version": "bedrock-2023-05-31",
-        "messages": messages,
-        "max_tokens": 1024,
-        "temperature": 0.7,
-    }
+# --- Mode Toggle ---
+mode = st.radio(
+    "Select Assistant Mode:",
+    ["Claude", "Agent", "RAG+Chunks"],
+    horizontal=True,
+    key="chat_mode"
+)
 
+# --- Chat Input ---
+if prompt := st.chat_input("What do you want to build today?"):
+    st.session_state.messages.append({"role": "user", "content": prompt})
     try:
-        response = bedrock.invoke_model(
-            modelId=BEDROCK_MODEL_ID,
-            contentType="application/json",
-            accept="application/json",
-            body=json.dumps(payload)
+        with track_usage(model=mode, user_input=prompt) as usage:
+            response = planner(st.session_state.messages, mode=mode)
+        st.session_state.messages.append({"role": "assistant", "content": response})
+        st.markdown(
+            f"💰 Estimated cost: <span style='color:green;'>**${get_cost_estimate(usage)}**</span>",
+            unsafe_allow_html=True
         )
-
-        body = json.loads(response["body"].read())
-        return body.get("content", "[Claude returned no content]")
-
     except Exception as e:
-        logger.exception("Claude invocation failed")
-        return f"⚠️ Claude error: {str(e)}"
+        st.error("❗ An error occurred. Falling back to Claude.")
+        fallback_mode = "Claude" if mode != "Claude" else "Agent"
+        with track_usage(model=fallback_mode, user_input=prompt) as usage:
+            response = planner(st.session_state.messages, mode=fallback_mode)
+        st.session_state.messages.append({"role": "assistant", "content": response})
 
+# --- Message Loop ---
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
 
-def call_bedrock_agent(user_input: str, session_id: Optional[str] = None) -> str:
-    """
-    Invokes a Bedrock Agent via InvokeAgent.
-    """
-    if not session_id:
-        session_id = "session-" + str(hash(user_input))
+# --- Planner Stage Gate ---
+if st.session_state.planner_stage == "final_confirmation":
+    st.warning("🧠 Just one more confirmation before I generate your solution…")
 
-    try:
-        response = agent_runtime.invoke_agent(
-            agentId=BEDROCK_AGENT_ID,
-            agentAliasId=BEDROCK_AGENT_ALIAS_ID,
-            sessionId=session_id,
-            input={"text": user_input}
-        )
+if st.session_state.planner_stage == "generating_solution":
+    st.info("⚙️ Generating architecture and initial proposal…")
 
-        # Decode streamed agent response body
-        body = response.get("completion", {}).get("content")
-        if body:
-            content = json.loads(body)
-            return content.get("message", "[Agent returned no message]")
-        else:
-            return "[Agent returned no message]"
+# --- Widget Panel ---
+if st.session_state.planner_stage == "showing_widgets":
+    st.divider()
+    st.subheader("📦 Deliverable Generators")
+    generate_arch(st.session_state.messages)
+    generate_cdk(st.session_state.messages)
+    generate_cfn(st.session_state.messages)
+    generate_cost_estimate(st.session_state.messages)
+    generate_doc(st.session_state.messages)
+    generate_drawio(st.session_state.messages)
 
-    except Exception as e:
-        logger.exception("Bedrock Agent invocation failed")
-        return f"⚠️ Agent error: {str(e)}"
-
-
-def get_ranked_chunks(query: str, all_chunks: List[Dict]) -> List[Dict]:
-    """
-    Return top-N relevant chunks using vector similarity.
-    """
-    return rank_chunks_by_similarity(query, all_chunks)[:MAX_CHUNKS]
+# --- Footer ---
+st.markdown(
+    f"<footer style='margin-top:3em; text-align:center; font-size:0.8rem; color:gray;'>"
+    f"Built by Truist Engineering & AI Lab | Powered by AWS Bedrock + OpenSearch"
+    f"</footer>",
+    unsafe_allow_html=True
+)
