@@ -1,19 +1,22 @@
+# chatbot/utils/monitor_utils.py
+
 import pandas as pd
 import os
 import json
-from typing import Literal, Optional, List
+from typing import Literal, Optional, List, Union
 from datetime import datetime
+
+from chatbot.utils.config_loader import get_config_value
+from chatbot.logger import logger
 
 # === Paths ===
 INTERACTIONS_LOG = os.getenv("INTERACTIONS_LOG_PATH", "logs/interactions.jsonl")
 
-if is_admin_user():
-    st.sidebar.markdown("🛠️ [Admin Config Dashboard](./monitor_config)")
-    st.sidebar.markdown("📈 [Monitor Dashboard](./monitor)")
-    
-# === Log Loader ===
+
+# === Log Loaders ===
 def load_logs() -> pd.DataFrame:
     if not os.path.exists(INTERACTIONS_LOG):
+        logger.warning("[Monitor] Log file not found.")
         return pd.DataFrame()
 
     records = []
@@ -22,7 +25,8 @@ def load_logs() -> pd.DataFrame:
             try:
                 records.append(json.loads(line.strip()))
             except json.JSONDecodeError:
-                continue  # skip malformed rows
+                logger.warning("[Monitor] Skipping malformed log line.")
+                continue
 
     df = pd.DataFrame(records)
     if "timestamp" in df.columns:
@@ -33,11 +37,18 @@ def load_logs() -> pd.DataFrame:
 def load_interaction_log() -> List[dict]:
     if not os.path.exists(INTERACTIONS_LOG):
         return []
+
+    records = []
     with open(INTERACTIONS_LOG, "r") as f:
-        return [json.loads(line.strip()) for line in f if line.strip()]
+        for line in f:
+            try:
+                records.append(json.loads(line.strip()))
+            except json.JSONDecodeError:
+                continue
+    return records
 
 
-# === Cost Summary by Entry ===
+# === Cost Summary ===
 def summarize_costs(logs: pd.DataFrame, mode_filter: Optional[Literal["Claude", "Agent", "RAG"]] = None) -> pd.DataFrame:
     if logs.empty:
         return pd.DataFrame(columns=["timestamp", "type", "tokens", "cost", "mode", "user"])
@@ -54,7 +65,7 @@ def summarize_costs(logs: pd.DataFrame, mode_filter: Optional[Literal["Claude", 
     })
 
 
-# === Usage Summary by Mode ===
+# === Usage Aggregations ===
 def summarize_usage_by_mode(logs: pd.DataFrame) -> pd.DataFrame:
     if logs.empty:
         return pd.DataFrame(columns=["Mode", "Total Cost ($)", "Total Tokens"])
@@ -67,7 +78,6 @@ def summarize_usage_by_mode(logs: pd.DataFrame) -> pd.DataFrame:
     })
 
 
-# === Aggregated Usage Summary (by date or user) ===
 def summarize_usage_aggregated(logs: pd.DataFrame, by: Literal["date", "user"] = "date") -> pd.DataFrame:
     if logs.empty:
         return pd.DataFrame()
@@ -78,21 +88,21 @@ def summarize_usage_aggregated(logs: pd.DataFrame, by: Literal["date", "user"] =
         return df.groupby("date")[["cost", "tokens"]].sum().reset_index()
     elif by == "user":
         return df.groupby("user")[["cost", "tokens"]].sum().reset_index()
-    else:
-        return pd.DataFrame()
+    return pd.DataFrame()
 
 
-# === Retrieval Source Analysis ===
-def safe_parse_sources(val) -> List[str]:
+# === RAG Insights ===
+def safe_parse_sources(val: Union[str, list]) -> List[str]:
     if isinstance(val, list):
         return val
     if isinstance(val, str):
         try:
             parsed = json.loads(val)
             return parsed if isinstance(parsed, list) else [str(parsed)]
-        except:
+        except Exception:
             return [s.strip() for s in val.split(",")]
     return []
+
 
 def get_retrieval_insights(logs: pd.DataFrame) -> pd.DataFrame:
     if logs.empty or "retrieval_sources" not in logs.columns:
@@ -106,10 +116,13 @@ def get_retrieval_insights(logs: pd.DataFrame) -> pd.DataFrame:
     })
 
 
-# === Anomaly Detection (per day) ===
-def detect_cost_spikes(logs: pd.DataFrame, threshold: float = 10.0) -> pd.DataFrame:
+# === Anomaly Detection ===
+def detect_cost_spikes(logs: pd.DataFrame, threshold: Optional[float] = None) -> pd.DataFrame:
     if logs.empty:
         return pd.DataFrame(columns=["date", "Total Cost"])
+
+    if threshold is None:
+        threshold = get_config_value("COST_SPIKE_THRESHOLD", 5.0)
 
     df = summarize_costs(logs)
     df["date"] = df["timestamp"].dt.date
@@ -118,16 +131,16 @@ def detect_cost_spikes(logs: pd.DataFrame, threshold: float = 10.0) -> pd.DataFr
     return spikes.reset_index(name="Total Cost")
 
 
-# === Recent Q&A for export ===
+# === Recent Questions ===
 def extract_recent_questions(logs: pd.DataFrame, limit: int = 10) -> List[dict]:
     if logs.empty:
         return []
 
-    qa_logs = logs[logs["type"] == "qa"]
+    qa_logs = logs[logs["type"] == "qa"].copy()
     qa_logs = qa_logs.sort_values("timestamp", ascending=False).head(limit)
     return qa_logs[["timestamp", "prompt", "response", "mode", "source"]].to_dict(orient="records")
 
 
-# === Timestamp Helper ===
+# === UTC Timestamp Helper ===
 def get_timestamp() -> str:
     return datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
