@@ -1,7 +1,7 @@
 # chatbot/rag/retrieval_layer.py
 
 import os
-from typing import List, Dict, Literal, Optional
+from typing import List, Dict
 from chatbot.utils.constants import (
     RETRIEVAL_BACKEND,
     BEDROCK_KB_ID,
@@ -12,13 +12,12 @@ from chatbot.logger import logger
 from chatbot.ranking import rank_chunks_by_similarity
 from chatbot.utils.text_utils import clean_text
 
-# Optional: boto3 Bedrock client for KB
 import boto3
 
-if RETRIEVAL_BACKEND == "bedrock":
-    bedrock_agent = boto3.client("bedrock-agent-runtime", region_name=BEDROCK_REGION)
+# === Bedrock KB Client ===
+bedrock_agent = boto3.client("bedrock-agent-runtime", region_name=BEDROCK_REGION)
 
-# Optional: OpenSearch connector
+# === OpenSearch (optional) ===
 try:
     from chatbot.rag.opensearch_client import search_opensearch
 except ImportError:
@@ -27,8 +26,7 @@ except ImportError:
 
 def get_relevant_chunks(query: str, top_k: int = MAX_CHUNKS) -> List[Dict]:
     """
-    Unified interface to retrieve relevant context chunks.
-    Supports Bedrock KB or OpenSearch, based on config.
+    Unified RAG interface — returns chunks from backend of choice.
     """
     logger.info(f"[Retrieval] Backend: {RETRIEVAL_BACKEND} | Query: {query}")
 
@@ -39,13 +37,13 @@ def get_relevant_chunks(query: str, top_k: int = MAX_CHUNKS) -> List[Dict]:
         return query_opensearch(query, top_k)
 
     else:
-        logger.warning(f"Unknown retrieval backend or OpenSearch client missing.")
+        logger.warning("[Retrieval] Unknown backend or OpenSearch not available")
         return []
 
 
 def query_bedrock_knowledge_base(query: str, top_k: int) -> List[Dict]:
     """
-    Query Amazon Bedrock Knowledge Base and extract normalized chunks.
+    Queries Bedrock Knowledge Base and formats chunks with metadata.
     """
     try:
         response = bedrock_agent.retrieve(
@@ -57,14 +55,16 @@ def query_bedrock_knowledge_base(query: str, top_k: int) -> List[Dict]:
         results = response.get("retrievalResults", [])
         chunks = []
         for item in results:
-            content = item.get("content", "")
+            content = clean_text(item.get("content", ""))
             metadata = item.get("metadata", {})
             chunks.append({
-                "content": clean_text(content),
+                "content": content,
                 "metadata": metadata,
+                "score": 0.8,  # Estimated base score for unranked Bedrock KB results
                 "source": "bedrock_kb"
             })
 
+        logger.info(f"[Bedrock KB] Retrieved {len(chunks)} chunks")
         return chunks
 
     except Exception as e:
@@ -74,7 +74,7 @@ def query_bedrock_knowledge_base(query: str, top_k: int) -> List[Dict]:
 
 def query_opensearch(query: str, top_k: int) -> List[Dict]:
     """
-    Query OpenSearch index for relevant chunks using similarity search.
+    Retrieves top chunks from OpenSearch with similarity scores.
     """
     try:
         raw_hits = search_opensearch(query, k=top_k)
@@ -83,10 +83,11 @@ def query_opensearch(query: str, top_k: int) -> List[Dict]:
             chunks.append({
                 "content": clean_text(hit["_source"].get("content", "")),
                 "metadata": hit["_source"].get("metadata", {}),
-                "score": hit["_score"],
+                "score": hit.get("_score", 0.0),
                 "source": "opensearch"
             })
 
+        logger.info(f"[OpenSearch] Retrieved {len(chunks)} chunks")
         return chunks
 
     except Exception as e:
@@ -96,7 +97,7 @@ def query_opensearch(query: str, top_k: int) -> List[Dict]:
 
 def get_ranked_relevant_chunks(query: str, all_chunks: List[Dict], top_k: int = MAX_CHUNKS) -> List[Dict]:
     """
-    Rerank chunks using local embedding similarity (fallback or hybrid mode).
+    Final reranker for relevance based on local embedding similarity.
     """
     if not all_chunks:
         return []
