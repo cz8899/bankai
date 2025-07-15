@@ -1,16 +1,18 @@
 # chatbot/utils/config_loader.py
-import json
+
 import os
+import json
 import boto3
 from botocore.exceptions import ClientError
 from typing import Any, Optional
 from chatbot.logger import logger
 
+# === Environment Variables ===
+CONFIG_FILE_PATH = os.getenv("DASHBOARD_CONFIG_PATH", "config/dashboard_config.json")
 CONFIG_JSON_PATH = os.getenv("TUNING_CONFIG_PATH", "config/ai_tuning.json")
 DYNAMO_TABLE = os.getenv("TUNING_CONFIG_TABLE", "devgenius_tuning_config")
-CONFIG_FILE_PATH = os.getenv("DASHBOARD_CONFIG_PATH", "config/dashboard_config.json")
 
-# Default fallback config
+# === Default Config ===
 DEFAULT_CONFIG = {
     "chunk_score_threshold": 0.5,
     "rerank_top_k": 5,
@@ -19,9 +21,13 @@ DEFAULT_CONFIG = {
 }
 
 
+# === JSON Config ===
 def load_config() -> dict:
+    """
+    Load user config from file, fallback to defaults.
+    """
     if not os.path.exists(CONFIG_FILE_PATH):
-        logger.warning(f"[Config] Config file not found, using defaults.")
+        logger.warning("[Config] Config file not found. Using defaults.")
         return DEFAULT_CONFIG
 
     try:
@@ -29,26 +35,38 @@ def load_config() -> dict:
             data = json.load(f)
         return {**DEFAULT_CONFIG, **data}
     except Exception as e:
-        logger.warning(f"[Config] Failed to load config: {e}")
+        logger.warning(f"[Config] Failed to load config from file: {e}")
         return DEFAULT_CONFIG
 
 
 def save_config(config: dict) -> bool:
+    """
+    Save current config to file.
+    """
     try:
+        os.makedirs(os.path.dirname(CONFIG_FILE_PATH), exist_ok=True)
         with open(CONFIG_FILE_PATH, "w") as f:
             json.dump(config, f, indent=2)
-        logger.info(f"[Config] Updated configuration saved.")
+        logger.info("[Config] Config saved successfully.")
         return True
     except Exception as e:
-        logger.error(f"[Config] Failed to write config: {e}")
+        logger.error(f"[Config] Failed to save config: {e}")
         return False
 
 
 def get_config_value(key: str, default: Optional[Any] = None) -> Any:
+    """
+    Read single config value from current config.
+    """
     config = load_config()
     return config.get(key, default)
 
-def load_tuning_config(source="json") -> dict:
+
+# === Advanced Tuning Config (JSON or DynamoDB) ===
+def load_tuning_config(source: str = "json") -> dict:
+    """
+    Load tuning config either from JSON file or DynamoDB.
+    """
     if source == "dynamo":
         try:
             ddb = boto3.client("dynamodb")
@@ -59,18 +77,21 @@ def load_tuning_config(source="json") -> dict:
             item = response.get("Item")
             return json.loads(item["payload"]["S"]) if item else {}
         except ClientError as e:
-            print(f"[ConfigLoader] DynamoDB fallback: {e}")
+            logger.error(f"[ConfigLoader] DynamoDB fallback: {e}")
             return {}
     else:
         try:
             with open(CONFIG_JSON_PATH) as f:
                 return json.load(f)
         except Exception as e:
-            print(f"[ConfigLoader] JSON fallback: {e}")
+            logger.warning(f"[ConfigLoader] JSON fallback: {e}")
             return {}
 
 
-def save_tuning_config(config: dict, target="json") -> bool:
+def save_tuning_config(config: dict, target: str = "json") -> bool:
+    """
+    Save tuning config to JSON or DynamoDB.
+    """
     if target == "dynamo":
         try:
             ddb = boto3.client("dynamodb")
@@ -81,15 +102,18 @@ def save_tuning_config(config: dict, target="json") -> bool:
                     "payload": {"S": json.dumps(config)}
                 }
             )
+            logger.info("[ConfigSaver] Saved to DynamoDB.")
             return True
         except ClientError as e:
-            print(f"[ConfigSaver] DynamoDB error: {e}")
+            logger.error(f"[ConfigSaver] DynamoDB error: {e}")
             return False
     else:
         try:
+            os.makedirs(os.path.dirname(CONFIG_JSON_PATH), exist_ok=True)
             with open(CONFIG_JSON_PATH, "w") as f:
                 json.dump(config, f, indent=2)
+            logger.info("[ConfigSaver] Saved to local JSON.")
             return True
         except Exception as e:
-            print(f"[ConfigSaver] JSON error: {e}")
+            logger.error(f"[ConfigSaver] JSON error: {e}")
             return False
