@@ -1,12 +1,7 @@
-# chatbot/utils/fallback_router.py
+# === chatbot/utils/fallback_router.py ===
+from chatbot.agent import call_claude
+from chatbot.logger import logger
 
-def fallback_router(current_mode: str) -> str:
-    """
-    Determines fallback mode based on current setting.
-    """
-    if current_mode == "Claude":
-        return "Agent"
-    elif current_mode == "Agent":
-        return "Claude"
-    else:
-        return "Claude"  # Default fallback for unknown modes
+def fallback_to_claude(user_input: str) -> str:
+    logger.warning("[Fallback] Switching to Claude fallback mode")
+    return call_claude(user_input)
