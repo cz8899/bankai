@@ -96,5 +96,4 @@ flowchart TD
     class T1,T2 llm
     class ext service
     class note1,note2 note
-<img width="740" height="1637" alt="image" src="https://github.com/user-attachments/assets/53f7467a-60c9-4625-8da9-4fc7360be26e" />
 ```
