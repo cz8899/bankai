@@ -1,3 +1,4 @@
+```mermaid
 flowchart TD
     %% Visual Groupings
     subgraph UI["📱 Frontend Layer"]
@@ -96,4 +97,4 @@ flowchart TD
     class ext service
     class note1,note2 note
 <img width="740" height="1637" alt="image" src="https://github.com/user-attachments/assets/53f7467a-60c9-4625-8da9-4fc7360be26e" />
-
+```
