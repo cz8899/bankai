@@ -1,40 +1,40 @@
-1. What are you most proud of in your career?
-I am most proud of leading the highly complex Microsoft Purview data governance project to a successful delivery at Truist. This was a multi-stakeholder initiative involving the Architecture Team, Data Governance Team, Cloud Platform Team, and Office Applications Team, each with differing priorities and technical constraints.
+1. What is motivating you to make a move and what is truly important to you in a new career at Truist?
+I am looking for an opportunity where I can apply my deep experience in cloud security architecture to drive measurable, enterprise-wide impact. Over the last several years, I have led complex initiatives across Azure, AWS, and hybrid environments — from implementing Microsoft Purview for data governance and compliance, to designing identity, access, and cryptographic controls that meet regulatory and business demands.
 
-The project demanded deep knowledge of compliance frameworks, identity and access management (IAM), data security policies, and cross-cloud integration. I coordinated across all teams to align requirements, manage dependencies, and design a secure, scalable architecture that adhered to Truist’s data governance standards and met strict compliance timelines.
+What excites me about Truist is the scale, complexity, and clear commitment to integrated cybersecurity as a business enabler. I value environments where security is treated not as a checkpoint but as an embedded part of design and delivery, and where cross-functional collaboration is essential to success.
 
-The solution not only satisfied regulatory and business requirements, but also established a repeatable architectural model for future governance-driven initiatives. This model directly informed the L2 and L3 architecture diagrams I developed — which encapsulate my philosophy of secure-by-design, policy-driven cloud architectures with clearly defined identity layers, observability pipelines, and compliance guardrails.
+In my next role, it’s important to me that I:
 
-2. Describe your cloud architecture philosophy and design experience.
-My approach to cloud architecture blends security, scalability, and observability from the ground up. I believe in designing at multiple abstraction levels — starting from L2 diagrams that define major service groupings, down to L3 diagrams that detail service-to-service interactions, IAM role boundaries, and operational monitoring flows.
+Lead strategic, enterprise-grade cloud security solutions that span IaaS, PaaS, and SaaS.
 
-For example, my recent work translating Azure-based governance and monitoring architecture into an AWS-native equivalent required mapping:
+Work closely with architecture, governance, application, and operations teams to ensure security is baked in from the first design conversation.
 
-Azure Purview → AWS Glue Data Catalog / Lake Formation
+Operate in a forward-looking, policy-driven environment where security architecture influences business outcomes, not just compliance.
 
-Azure Monitor & Sentinel → CloudWatch, CloudTrail, Security Hub, GuardDuty
+2. If you started tomorrow, how would you approach the role?
+If I were to join tomorrow as Cloud Cybersecurity Solution Principal Architect, I would focus on three parallel tracks from day one:
 
-Azure Active Directory → Amazon Cognito / IAM / SSO
+Listen & Understand the Landscape – Meet with Corporate Information Security, key Line of Business stakeholders, and Enterprise Architecture to map the current state of cloud adoption, security posture, and governance maturity. This ensures my recommendations fit Truist’s priorities and existing frameworks.
 
-This translation demanded a deep understanding of both ecosystems, ensuring that compliance and security controls remained intact while leveraging AWS-native services. My IAM designs always incorporate least-privilege access, permission boundaries, and policy-based controls, aligning with Truist’s security posture.
+Quick-Win Security Alignment – Identify near-term, high-impact improvements in identity & access management, logging & monitoring, and cloud governance controls that can be implemented quickly, demonstrating value early while building credibility.
 
-3. Key skills and experiences relevant to this position:
+Strategic Security Roadmap – Begin shaping a longer-term, integrated cloud security architecture blueprint that covers application security, cryptography, IAM, monitoring, and compliance, ensuring it aligns with Truist’s cloud migration, digital integration, and modernization plans. This would include evaluating and selecting cloud-native and third-party security tools, always balancing technical fit, risk reduction, and operational sustainability.
 
-Cloud Platforms: AWS (advanced), Azure (advanced), hybrid integration strategies
+My approach combines hands-on architectural design, executive-level communication, and a proven track record of building consensus across technical and non-technical teams — exactly what’s needed to ensure that cloud security is not an afterthought, but a core enabler of Truist’s digital strategy.
 
-Identity & Access Management: IAM, Cognito, SSO, Azure AD, permission boundaries, role-based access design
 
-Compliance & Security: CISSP certified; led initiatives with Wiz, CloudGuard, AWS Security Hub, Azure Security Center
 
-Observability & Monitoring: End-to-end logging from CloudTrail into CloudWatch, metric-based alerting via AWS native tools and integration with SIEM solutions
+ell me about your experience as it relates to above
+In my current role at Truist, I have been deeply engaged in designing and implementing secure, enterprise-scale cloud architectures across IaaS, PaaS, and SaaS environments, with a strong focus on security, governance, and compliance. My experience spans end-to-end — from conceptual architecture and security requirement gathering, through vendor selection and integration, to implementation and operational handover.
 
-Architecture Leadership: Creation of L2/L3 diagrams to align technical design with business and compliance goals
+I have hands-on expertise in identity and access management, cryptography, application security, logging, monitoring, and governance frameworks — all aligned with best practices such as NIST, CIS Benchmarks, and Zero Trust principles. I have worked closely with Enterprise Architecture, Corporate Information Security, Data Governance, and various LOB teams to design security architectures that are both robust and adaptable to evolving regulatory and business needs.
 
-Project Leadership: Driving multi-team projects like Microsoft Purview across architecture, data governance, cybersecurity, and application teams
+One of my key strengths is bridging technical depth with business alignment — ensuring that every cloud security solution I design not only meets stringent cybersecurity requirements but also enables agility, scalability, and cost efficiency for the business.
 
-Stakeholder Management: Proven record of building consensus across LOBs, platform teams, and CISO’s office
+What professional accomplishment are you most proud of?
+I am most proud of leading a highly complex Microsoft Purview Data Governance program to a successful enterprise rollout at Truist. This initiative required aligning multiple high-impact stakeholders — including the Architecture team, Data Governance team, Cloud Platform team, and Office Applications team — each with unique priorities and constraints.
 
-4. Why I am a strong fit for this Cloud Architect role:
-I combine hands-on technical depth with strategic architectural thinking, proven through delivering large-scale, compliance-heavy cloud solutions within Truist. I understand the internal governance landscape, the criticality of secure and compliant designs, and the necessity of translating complex multi-cloud architectures into clear, actionable roadmaps for all stakeholders.
+The project involved designing and implementing enterprise-wide data classification, labeling, and protection capabilities integrated with Microsoft Purview and M365 security controls, ensuring compliance with internal governance frameworks and regulatory requirements. I navigated complex technical challenges, from hybrid cloud integration to role-based access control and encryption policy enforcement, while also managing the organizational change aspects to ensure smooth adoption.
 
-My Purview project success demonstrates my ability to lead difficult initiatives under tight timelines, while my L2/L3 architecture frameworks reflect my ongoing commitment to building secure, observable, and policy-driven cloud solutions that can scale with Truist’s future needs.
+Delivering this project on time and within scope not only elevated Truist’s data governance maturity but also set a foundation for scalable, compliant cloud adoption across multiple lines of business. It exemplified my ability to combine deep technical expertise, stakeholder management, and strategic vision — qualities I will bring to the Cloud Cybersecurity Solution Principal Architect role.
+
